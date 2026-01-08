@@ -1,0 +1,316 @@
+.shell {
+    display: flex;
+    height: 100vh;
+    font-family: system-ui, sans-serif;
+}
+
+.sidebar {
+    width: 320px;
+    border-right: 1px solid #ddd;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebarHeader {
+    padding: 12px;
+    border-bottom: 1px solid #ddd;
+}
+
+.brand {
+    font-weight: 700;
+}
+
+.sidebarSectionTitle {
+    padding: 10px 12px;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: #666;
+}
+
+.fileList {
+    padding: 6px;
+    overflow: auto;
+}
+
+.fileItem {
+    width: 100%;
+    text-align: left;
+    padding: 8px 10px;
+    border: 0;
+    background: transparent;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.fileItem:hover {
+    background: #f2f2f2;
+}
+
+.fileItem.active {
+    background: #e9eefc;
+}
+
+.main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #ddd;
+}
+
+.path {
+    flex: 1;
+    font-size: 14px;
+    color: #333;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tabs {
+    display: flex;
+    gap: 6px;
+}
+
+.tab {
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    background: #fff;
+    cursor: pointer;
+}
+
+.tab.active {
+    border-color: #999;
+}
+
+.actions {
+    display: flex;
+    gap: 8px;
+}
+
+.actions button {
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    background: #fff;
+    cursor: pointer;
+}
+
+.actions button:hover {
+    background: #f6f6f6;
+}
+
+.editorPane {
+    flex: 1;
+}
+
+.previewPane {
+    flex: 1;
+    overflow: auto;
+    padding: 16px;
+}
+
+.previewInner {
+    max-width: 900px;
+}
+
+.modalBackdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal {
+    width: 620px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+    padding: 12px;
+}
+
+.modalHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modalTitle {
+    font-weight: 700;
+}
+
+.modalSearch {
+    width: 100%;
+    margin: 10px 0;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+}
+
+.blockList {
+    max-height: 340px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.blockItem {
+    text-align: left;
+    padding: 10px;
+    border: 1px solid #eee;
+    border-radius: 10px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.blockItem:hover {
+    background: #f7f7f7;
+}
+
+.blockId {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: #555;
+}
+
+.blockTitle {
+    font-size: 13px;
+    color: #222;
+}
+
+.buttonBar {
+    display: flex;
+    gap: 6px;
+}
+
+.buttonBar button {
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    background: #fff;
+    cursor: pointer;
+}
+
+.buttonBar button:hover:not(:disabled) {
+    background: #f2f2f2;
+}
+
+.buttonBar button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Live preview text styling */
+.cm-live-bold {
+    font-weight: 700;
+}
+
+.cm-live-italic {
+    font-style: italic;
+}
+
+.cm-live-h {
+    font-weight: 800;
+}
+
+.cm-live-h1 {
+    font-size: 1.8em;
+}
+
+.cm-live-h2 {
+    font-size: 1.5em;
+}
+
+.cm-live-h3 {
+    font-size: 1.25em;
+}
+
+.cm-live-h4 {
+    font-size: 1.1em;
+}
+
+.cm-live-h5 {
+    font-size: 1.0em;
+}
+
+.cm-live-h6 {
+    font-size: 0.95em;
+}
+
+.cm-block-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid #ddd;
+    background: #f7f7f7;
+    font-size: 0.9em;
+    cursor: pointer;
+    user-select: none;
+}
+
+.cm-block-pill:hover {
+    background: #efefef;
+    border-color: #cfcfcf;
+}
+
+.cm-live-link {
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.cm-live-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.95em;
+    padding: 1px 6px;
+    border: 1px solid #e2e2e2;
+    border-radius: 8px;
+    background: #f7f7f7;
+}
+
+.docTabs {
+    display: flex;
+    gap: 6px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #ddd;
+    overflow-x: auto;
+}
+
+.docTab {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.docTab.active {
+    border-color: #999;
+}
+
+.docTabBtn {
+    padding: 6px 10px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.docTabClose {
+    padding: 6px 10px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    border-left: 1px solid #eee;
+}
