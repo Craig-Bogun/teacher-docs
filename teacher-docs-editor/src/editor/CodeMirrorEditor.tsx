@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Compartment, EditorSelection, EditorState } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { Compartment, EditorSelection, EditorState, Transaction } from "@codemirror/state";
+import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
+import { languages } from "@codemirror/language-data";
+import { GFM } from "@lezer/markdown";
 import { searchKeymap } from "@codemirror/search";
 import { livePreview } from "./livePreview";
+import { ButtonBar } from "./ButtonBar";
+import "./CodeMirrorEditor.css";
 
 export type EditorMode = "write" | "source";
 
 type Props = {
+
     value: string;
     onChange: (v: string) => void;
     onViewReady: (view: EditorView) => void;
@@ -16,15 +21,18 @@ type Props = {
 
     blockLabel?: (id: string) => string;
     onOpenBlock?: (id: string) => void;
+    onInsertBlock: () => void;
+    onSave: () => void;
 };
 
 
 export function CodeMirrorEditor({
-    value, onChange, onViewReady, mode, blockLabel, onOpenBlock
+    value, onChange, onViewReady, mode, blockLabel, onOpenBlock, onInsertBlock, onSave
 }: Props) {
 
     const hostRef = useRef<HTMLDivElement | null>(null);
     const viewRef = useRef<EditorView | null>(null);
+    const onChangeRef = useRef(onChange);
 
     // A compartment lets us reconfigure editor extensions without rebuilding the editor
     const modeCompartmentRef = useRef<Compartment | null>(null);
@@ -37,6 +45,10 @@ export function CodeMirrorEditor({
 
 
     useEffect(() => {
+        onChangeRef.current = onChange;
+    }, [onChange]);
+
+    useEffect(() => {
         if (!hostRef.current) return;
 
         const modeCompartment = new Compartment();
@@ -45,13 +57,16 @@ export function CodeMirrorEditor({
         const state = EditorState.create({
             doc: value,
             extensions: [
+                lineNumbers(),
+                highlightActiveLine(),
                 history(),
-                markdown(),
-                keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+                markdown({ codeLanguages: languages, extensions: [GFM] }),
+                keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
                 EditorView.updateListener.of((u) => {
-                    if (u.docChanged) onChange(u.state.doc.toString());
+                    if (u.docChanged) onChangeRef.current(u.state.doc.toString());
                 }),
                 EditorView.lineWrapping,
+                EditorView.theme({ "&": { height: "100%" } }),
 
                 // mode switchable extensions live here:
                 modeCompartment.of(modeExtensions),
@@ -78,10 +93,11 @@ export function CodeMirrorEditor({
         const current = view.state.doc.toString();
         if (current === value) return;
 
-        const pos = Math.min(view.state.selection.main.from, value.length);
         view.dispatch({
             changes: { from: 0, to: current.length, insert: value },
-            selection: EditorSelection.cursor(pos),
+            selection: EditorSelection.cursor(0),
+            scrollIntoView: true,
+            annotations: [Transaction.addToHistory.of(false)],
         });
 
     }, [value]);
@@ -97,5 +113,16 @@ export function CodeMirrorEditor({
         });
     }, [modeExtensions]);
 
-    return <div ref={hostRef} style={{ height: "100%", width: "100%" }} />;
+    return (
+        <div className="cm-editor-wrapper">
+            <div className="cm-editor-toolbar">
+                <ButtonBar
+                    view={viewRef.current}
+                    onInsertBlock={onInsertBlock}
+                    onSave={onSave}
+                />
+            </div>
+            <div ref={hostRef} className="cm-editor-host" />
+        </div>
+    );
 }

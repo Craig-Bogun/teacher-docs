@@ -6,7 +6,6 @@ import { renderAssembledHtml } from "../repo/blockResolver";
 
 import "./styles.css";
 import type { EditorView } from "@codemirror/view";
-import { ButtonBar } from "../editor/ButtonBar";
 
 type Tab = "write" | "source" | "preview";
 
@@ -183,7 +182,6 @@ export default function App() {
             <main className="main">
                 <header className="topbar">
                     <div className="path">{activePath}</div>
-                    <ButtonBar view={editorView} />
 
                     <div className="tabs">
                         <button
@@ -211,10 +209,6 @@ export default function App() {
                         </button>
                     </div>
 
-                    <div className="actions">
-                        <button onClick={() => setShowBlockPicker(true)}>Insert Block</button>
-                        <button onClick={saveActive}>Save</button>
-                    </div>
                 </header>
 
                 {/* document tabs strip */}
@@ -262,6 +256,8 @@ export default function App() {
                             mode={tab === "write" ? "write" : "source"}
                             blockLabel={blockLabel}
                             onOpenBlock={(id) => openTab(`blocks/${id}.md`, { activate: true })}
+                            onInsertBlock={() => setShowBlockPicker(true)}
+                            onSave={saveActive}
                         />
                     </section>
                 )}
