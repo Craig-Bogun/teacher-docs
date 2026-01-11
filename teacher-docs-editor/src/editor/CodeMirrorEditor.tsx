@@ -8,6 +8,8 @@ import { GFM } from "@lezer/markdown";
 import { searchKeymap } from "@codemirror/search";
 import { livePreview } from "./livePreview";
 import { ButtonBar } from "./ButtonBar";
+import { Sidebar } from "./Sidebar";
+import type { FileItem } from "./Sidebar";
 import "./CodeMirrorEditor.css";
 
 export type EditorMode = "write" | "source";
@@ -23,11 +25,15 @@ type Props = {
     onOpenBlock?: (id: string) => void;
     onInsertBlock: () => void;
     onSave: () => void;
+    fileItems?: FileItem[];
+    onFileSelect?: (item: FileItem) => void;
+    activeFileId?: string;
+    onImageUpload?: () => Promise<string | null>;
 };
 
 
 export function CodeMirrorEditor({
-    value, onChange, onViewReady, mode, blockLabel, onOpenBlock, onInsertBlock, onSave
+    value, onChange, onViewReady, mode, blockLabel, onOpenBlock, onInsertBlock, onSave, fileItems, onFileSelect, activeFileId, onImageUpload
 }: Props) {
 
     const hostRef = useRef<HTMLDivElement | null>(null);
@@ -113,16 +119,32 @@ export function CodeMirrorEditor({
         });
     }, [modeExtensions]);
 
+    const sidebarItems = fileItems || [
+        {
+            id: "root",
+            name: "My Documents",
+            type: "folder",
+            children: [
+                { id: "1", name: "Lesson Plan.md", type: "file" },
+                { id: "2", name: "Notes.md", type: "file" },
+            ]
+        }
+    ];
+
     return (
-        <div className="cm-editor-wrapper">
-            <div className="cm-editor-toolbar">
-                <ButtonBar
-                    view={viewRef.current}
-                    onInsertBlock={onInsertBlock}
-                    onSave={onSave}
-                />
+        <div className="app-main-layout">
+            <Sidebar items={sidebarItems} onSelect={onFileSelect || (() => { })} activeId={activeFileId} />
+            <div className="cm-editor-wrapper">
+                <div className="cm-editor-toolbar">
+                    <ButtonBar
+                        view={viewRef.current}
+                        onInsertBlock={onInsertBlock}
+                        onSave={onSave}
+                        onImageUpload={onImageUpload}
+                    />
+                </div>
+                <div ref={hostRef} className="cm-editor-host" />
             </div>
-            <div ref={hostRef} className="cm-editor-host" />
         </div>
     );
 }

@@ -1,6 +1,8 @@
 {
   "dependencies": {
     "@codemirror/language-data": "^6.5.2",
-    "@lezer/markdown": "^1.6.3"
+    "@isomorphic-git/lightning-fs": "^4.6.2",
+    "@lezer/markdown": "^1.6.3",
+    "isomorphic-git": "^1.36.1"
   }
 }

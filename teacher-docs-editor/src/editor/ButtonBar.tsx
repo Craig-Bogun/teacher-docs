@@ -5,9 +5,10 @@ type Props = {
     view: EditorView | null;
     onInsertBlock: () => void;
     onSave: () => void;
+    onImageUpload?: () => Promise<string | null>;
 };
 
-export function ButtonBar({ view, onInsertBlock, onSave }: Props) {
+export function ButtonBar({ view, onInsertBlock, onSave, onImageUpload }: Props) {
     const [showTableMenu, setShowTableMenu] = useState(false);
     const [tableDims, setTableDims] = useState({ rows: 0, cols: 0 });
     const tableMenuRef = useRef<HTMLDivElement>(null);
@@ -106,8 +107,16 @@ export function ButtonBar({ view, onInsertBlock, onSave }: Props) {
         view.focus();
     };
 
-    const handleImage = () => {
+    const handleImage = async () => {
         if (!view) return;
+
+        let imagePath = "url";
+        if (onImageUpload) {
+            const path = await onImageUpload();
+            if (!path) return;
+            imagePath = path;
+        }
+
         const { state, dispatch } = view;
         const { from, to } = state.selection.main;
         const insertText = `!alt text`;
