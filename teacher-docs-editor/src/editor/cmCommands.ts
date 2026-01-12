@@ -57,37 +57,6 @@ export function cmdHeading2(view: EditorView) {
     view.focus();
 }
 
-function prefixSelectedLines(view: EditorView, prefixFn: (i: number) => string) {
-    const { state } = view;
-    const sel = state.selection.main;
-
-    const startLine = state.doc.lineAt(sel.from);
-    const endLine = state.doc.lineAt(sel.to);
-
-    const changes: { from: number; to: number; insert: string }[] = [];
-    let i = 0;
-
-    for (let pos = startLine.from; pos <= endLine.from;) {
-        const line = state.doc.lineAt(pos);
-        const prefix = prefixFn(i);
-
-        // Don’t double-prefix if already looks like a list item
-        const already =
-            /^(\s*[-*+]\s+)/.test(line.text) || /^(\s*\d+\.\s+)/.test(line.text);
-
-        if (!already && line.text.trim().length > 0) {
-            changes.push({ from: line.from, to: line.from, insert: prefix });
-        }
-
-        i++;
-        pos = line.to + 1;
-        if (pos > state.doc.length) break;
-    }
-
-    view.dispatch({ changes, scrollIntoView: true });
-    view.focus();
-}
-
 function getSelectedLines(view: EditorView) {
     const { state } = view;
     const sel = state.selection.main;
@@ -106,7 +75,6 @@ function getSelectedLines(view: EditorView) {
 }
 
 export function cmdBulletedList(view: EditorView) {
-    const { state } = view;
     const lines = getSelectedLines(view);
 
     const bulletRe = /^(\s*)([-*+])\s+/;
@@ -123,7 +91,6 @@ export function cmdBulletedList(view: EditorView) {
             const m = bulletRe.exec(line.text);
             if (!m) continue;
             const removeFrom = line.from + m[1].length; // keep indentation
-            const removeTo = removeFrom + (m[2].length + 1); // "-" + space (approx)
             // m[0] includes indent + marker + spaces; remove only marker+spaces after indent
             changes.push({ from: removeFrom, to: line.from + m[0].length, insert: "" });
         } else {
@@ -138,7 +105,6 @@ export function cmdBulletedList(view: EditorView) {
 }
 
 export function cmdNumberedList(view: EditorView) {
-    const { state } = view;
     const lines = getSelectedLines(view);
 
     const numRe = /^(\s*)(\d+)\.\s+/;

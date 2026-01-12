@@ -177,10 +177,24 @@ export const fileSystemApi = {
         const blocks: { id: string; title: string }[] = [];
 
         for (const f of allFiles) {
-            if (f.kind === "file" && f.path.endsWith(".md")) {
-                blocks.push({ id: f.path, title: f.path });
+            if (f.kind === "file" && f.path.startsWith("blocks/") && f.path.endsWith(".md")) {
+                const id = f.path.replace("blocks/", "").replace(".md", "");
+                let title = id;
+                try {
+                    const content = await this.loadFile(f.path);
+                    const firstLine = content.split("\n")[0]?.replace(/^#+\s*/, "") ?? "";
+                    title = firstLine || id;
+                } catch {
+                    // If file can't be read, use id as title
+                }
+                blocks.push({ id, title });
             }
         }
-        return blocks;
+        return blocks.sort((a, b) => a.id.localeCompare(b.id));
+    },
+
+    async loadBlock(id: string): Promise<string> {
+        const path = `blocks/${id}.md`;
+        return this.loadFile(path);
     }
 };

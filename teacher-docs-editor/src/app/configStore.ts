@@ -206,6 +206,27 @@ export const onlineRepoApi = {
 
     async listBlocks(): Promise<{ id: string; title: string }[]> {
         const files = await this.listFiles();
-        return files.filter(f => f.path.endsWith(".md")).map(f => ({ id: f.path, title: f.path }));
+        const blocks: { id: string; title: string }[] = [];
+
+        for (const f of files) {
+            if (f.kind === "file" && f.path.startsWith("blocks/") && f.path.endsWith(".md")) {
+                const id = f.path.replace("blocks/", "").replace(".md", "");
+                let title = id;
+                try {
+                    const content = await this.loadFile(f.path);
+                    const firstLine = content.split("\n")[0]?.replace(/^#+\s*/, "") ?? "";
+                    title = firstLine || id;
+                } catch {
+                    // If file can't be read, use id as title
+                }
+                blocks.push({ id, title });
+            }
+        }
+        return blocks.sort((a, b) => a.id.localeCompare(b.id));
+    },
+
+    async loadBlock(id: string): Promise<string> {
+        const path = `blocks/${id}.md`;
+        return this.loadFile(path);
     }
 };

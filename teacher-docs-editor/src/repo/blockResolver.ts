@@ -9,7 +9,10 @@ export async function renderAssembledHtml(raw: string, api: ContentAPI): Promise
 
     let assembled = raw;
     const matches = [...raw.matchAll(pattern)];
-    for (const m of matches) {
+    
+    // Process matches from end to beginning to avoid position shifts during replacement
+    for (let i = matches.length - 1; i >= 0; i--) {
+        const m = matches[i];
         const id = m[1];
         let blockMd = "";
         try {
@@ -17,7 +20,8 @@ export async function renderAssembledHtml(raw: string, api: ContentAPI): Promise
         } catch {
             blockMd = `> Missing block: ${id}`;
         }
-        assembled = assembled.replace(m[0], blockMd);
+        // Replace from end to beginning to maintain correct positions
+        assembled = assembled.slice(0, m.index!) + blockMd + assembled.slice(m.index! + m[0].length);
     }
 
     return md.render(assembled);

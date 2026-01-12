@@ -110,11 +110,10 @@ export function ButtonBar({ view, onInsertBlock, onSave, onImageUpload }: Props)
     const handleImage = async () => {
         if (!view) return;
 
-        let imagePath = "url";
         if (onImageUpload) {
             const path = await onImageUpload();
             if (!path) return;
-            imagePath = path;
+            // TODO: Use path in image markdown insertion
         }
 
         const { state, dispatch } = view;
