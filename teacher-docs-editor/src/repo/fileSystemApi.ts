@@ -5,6 +5,7 @@ export interface ContentRepository {
     loadFile(path: string): Promise<string>;
     saveFile(path: string, content: string): Promise<void>;
     listBlocks(): Promise<{ id: string; title: string }[]>;
+    loadBlock(id: string): Promise<string>;
 }
 
 // IndexedDB Helpers
@@ -29,8 +30,10 @@ async function saveHandle(handle: FileSystemDirectoryHandle) {
     const db = await getDB();
     const tx = db.transaction(STORE_NAME, "readwrite");
     tx.objectStore(STORE_NAME).put(handle, "root");
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         tx.oncomplete = () => resolve(undefined);
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
     });
 }
 
@@ -51,7 +54,13 @@ export const fileSystemApi = {
         try {
             // @ts-ignore
             rootHandle = await window.showDirectoryPicker();
-            if (rootHandle) await saveHandle(rootHandle);
+            if (rootHandle) {
+                try {
+                    await saveHandle(rootHandle);
+                } catch (e) {
+                    console.warn("Failed to save handle", e);
+                }
+            }
         } catch (e) {
             console.error("User cancelled folder picker", e);
             throw e;
@@ -71,7 +80,11 @@ export const fileSystemApi = {
             rootHandle = await window.showDirectoryPicker();
             if (!rootHandle) throw new Error("No handle");
 
-            await saveHandle(rootHandle);
+            try {
+                await saveHandle(rootHandle);
+            } catch (e) {
+                console.warn("Failed to save handle in initRepo", e);
+            }
 
             await rootHandle.getDirectoryHandle("docs", { create: true });
             await rootHandle.getDirectoryHandle("assets", { create: true });
@@ -86,7 +99,11 @@ export const fileSystemApi = {
     async listFiles(): Promise<FileNode[]> {
         if (!rootHandle) {
             // Try to restore from IndexedDB
-            rootHandle = await loadHandle();
+            try {
+                rootHandle = await loadHandle();
+            } catch (e) {
+                console.warn("Failed to load handle", e);
+            }
 
             if (rootHandle) {
                 // @ts-ignore
@@ -127,7 +144,7 @@ export const fileSystemApi = {
                 } else if (entry.kind === "directory") {
                     if (entry.name === ".git" || entry.name === "node_modules") continue;
                     
-                    files.push({ path: entryPath, kind: "folder" } as any);
+                    files.push({ path: entryPath, kind: "dir" });
                     // entry is already the handle
                     await traverse(entry as any, entryPath);
                 }

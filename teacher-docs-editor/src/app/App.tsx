@@ -20,7 +20,7 @@ type TabDoc = {
 };
 
 export default function App() {
-    const [isConfigured, setIsConfigured] = useState(false);
+    const [isConfigured, setIsConfigured] = useState<boolean | null>(null); // null = checking, true = configured, false = not configured
     const [repo, setRepo] = useState<ContentRepository | null>(null);
     const [files, setFiles] = useState<FileNode[]>([]);
     const [tab, setTab] = useState<Tab>("write");
@@ -59,6 +59,9 @@ export default function App() {
     };
 
     useEffect(() => {
+        // Expose configStore to window for console access
+        (window as any).configStore = configStore;
+        
         // 1. Load Config on Startup
         (async () => {
             const config = await configStore.load();
@@ -81,6 +84,9 @@ export default function App() {
                 } else {
                     setRepo(onlineRepoApi as any);
                 }
+            } else {
+                // No config found - show welcome screen
+                setIsConfigured(false);
             }
         })();
     }, []);
@@ -275,7 +281,7 @@ export default function App() {
         };
 
         files.forEach((f) => {
-            insert(f.path, f.kind as "file" | "folder");
+            insert(f.path, f.kind === "dir" ? "folder" : "file");
         });
 
         return root;
@@ -339,29 +345,52 @@ export default function App() {
         reader.readAsDataURL(file);
     }
 
-    async function handleSaveConfig() {
-        const config: AppConfig = {
-            repoType,
-            gitUrl: gitCreds.url,
-            gitUsername: gitCreds.username,
-            gitToken: gitCreds.token,
-            gcClientId: gcCreds.clientId,
-            gcApiKey: gcCreds.apiKey
-        };
-
-        await configStore.save(config);
-
+    async function handleSaveConfig(e?: React.MouseEvent) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
         if (repoType === "fs") {
             try {
-                // Explicitly open to capture user gesture before state update
-                await fileSystemApi.open();
-                setRepo(fileSystemApi);
-                setIsConfigured(true);
-                setShowConsole(false);
+                // Check if API is available
+                if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+                    // Open folder picker FIRST (requires user gesture)
+                    await fileSystemApi.open();
+                    
+                    // Only save config after folder is selected
+                    const config: AppConfig = {
+                        repoType,
+                        gitUrl: gitCreds.url,
+                        gitUsername: gitCreds.username,
+                        gitToken: gitCreds.token,
+                        gcClientId: gcCreds.clientId,
+                        gcApiKey: gcCreds.apiKey
+                    };
+                    await configStore.save(config);
+                    
+                    setRepo(fileSystemApi);
+                    setIsConfigured(true);
+                    setShowConsole(false);
+                } else {
+                    alert("File System Access API is not available in this browser. Please use a modern browser like Chrome, Edge, or Opera.");
+                }
             } catch (e) {
-                // User cancelled, stay in config
+                // User cancelled folder picker or error occurred
+                // Stay in config mode - don't save anything
             }
         } else {
+            // For online repo, save config immediately
+            const config: AppConfig = {
+                repoType,
+                gitUrl: gitCreds.url,
+                gitUsername: gitCreds.username,
+                gitToken: gitCreds.token,
+                gcClientId: gcCreds.clientId,
+                gcApiKey: gcCreds.apiKey
+            };
+            await configStore.save(config);
+            
             setRepo(onlineRepoApi as any);
             setIsConfigured(true);
             setShowConsole(false);
@@ -391,6 +420,16 @@ export default function App() {
         }
     }
 
+    // Show loading state while checking config
+    if (isConfigured === null) {
+        return (
+            <div className="shell" style={{ alignItems: "center", justifyContent: "center", background: "#f5f5f5" }}>
+                <div style={{ color: "#666" }}>Loading...</div>
+            </div>
+        );
+    }
+
+    // Show welcome screen only when explicitly not configured
     if (!isConfigured) {
         return (
             <div className="shell" style={{ alignItems: "center", justifyContent: "center", background: "#f5f5f5" }}>
@@ -438,7 +477,7 @@ export default function App() {
                         onClick={handleSaveConfig}
                         style={{ width: "100%", padding: "12px", background: "#007bff", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
                     >
-                        Save & Continue
+                        {repoType === "fs" ? "Select Folder & Continue" : "Save & Continue"}
                     </button>
 
                     <div style={{ marginTop: "20px", textAlign: "center", fontSize: "13px", color: "#666" }}>
