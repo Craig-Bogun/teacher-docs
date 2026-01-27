@@ -7,6 +7,7 @@ import { fileSystemApi } from "../repo/fileSystemApi";
 import type { ContentRepository } from "../repo/fileSystemApi";
 import { configStore, onlineRepoApi } from "./configStore";
 import type { AppConfig } from "./configStore";
+import { RepoSearchIndex, type SearchResult } from "../search/searchIndex";
 
 import "./styles.css";
 import type { FileItem } from "../editor/Sidebar";
@@ -53,6 +54,14 @@ export default function App() {
 
     const activeTab = tabsByPath[activePath];
 
+    // Search State
+    const [searchQuery, setSearchQuery] = useState("");
+    const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+    const [isIndexing, setIsIndexing] = useState(false);
+    const [indexProgress, setIndexProgress] = useState<{ done: number; total: number } | null>(null);
+    const searchIndexRef = useRef<RepoSearchIndex | null>(null);
+
+
     const blockLabel = (id: string) => {
         const b = blocks.find((x) => x.id === id);
         return b ? b.title || b.id : id;
@@ -61,7 +70,7 @@ export default function App() {
     useEffect(() => {
         // Expose configStore to window for console access
         (window as any).configStore = configStore;
-        
+
         // 1. Load Config on Startup
         (async () => {
             const config = await configStore.load();
@@ -96,6 +105,53 @@ export default function App() {
             refreshFileList();
         }
     }, [repo]);
+
+    // Build Search Index
+    useEffect(() => {
+        if (!repo) return;
+
+        const idx = new RepoSearchIndex();
+        searchIndexRef.current = idx;
+
+        let cancelled = false;
+
+        (async () => {
+            setIsIndexing(true);
+            setIndexProgress({ done: 0, total: 0 });
+
+            try {
+                await idx.build(repo, (done: any, total: any) => {
+                    if (!cancelled) setIndexProgress({ done, total });
+                });
+            } finally {
+                if (!cancelled) {
+                    setIsIndexing(false);
+                    setIndexProgress(null);
+                }
+            }
+        })();
+
+        return () => { cancelled = true; };
+    }, [repo]);
+
+
+    // Search Results
+    useEffect(() => {
+        const idx = searchIndexRef.current;
+        if (!idx) return;
+
+        const q = searchQuery.trim();
+        if (!q) {
+            setSearchResults([]);
+            return;
+        }
+
+        const t = window.setTimeout(() => {
+            setSearchResults(idx.search(q, 30));
+        }, 120);
+
+        return () => window.clearTimeout(t);
+    }, [searchQuery]);
 
     async function refreshFileList() {
         if (!repo) return;
@@ -183,6 +239,9 @@ export default function App() {
         }
 
         await repo.saveFile(activePath, t.content);
+        // keep search index up to date
+        searchIndexRef.current?.upsert(activePath, t.content);
+
 
         setTabsByPath((prev) => ({
             ...prev,
@@ -192,13 +251,13 @@ export default function App() {
 
     async function performSaveAs() {
         if (!repo || !saveAsState.currentPath) return;
-        
+
         const cleanName = newFileName.endsWith(".md") ? newFileName : `${newFileName}.md`;
         const newPath = `${newFileType}/${cleanName}`;
-        
+
         const content = tabsByPath[saveAsState.currentPath].content;
         await repo.saveFile(newPath, content);
-        
+
         // Rename tab
         const oldPath = saveAsState.currentPath;
         setTabsByPath(prev => {
@@ -207,10 +266,10 @@ export default function App() {
             copy[newPath] = { path: newPath, content, dirty: false };
             return copy;
         });
-        
+
         setOpenOrder(prev => prev.map(p => p === oldPath ? newPath : p));
         setActivePath(newPath);
-        
+
         setSaveAsState({ isOpen: false });
         refreshFileList();
     }
@@ -281,7 +340,7 @@ export default function App() {
         };
 
         files.forEach((f) => {
-            insert(f.path, f.kind === "dir" ? "folder" : "file");
+            insert(f.path, f.kind as "file" | "folder");
         });
 
         return root;
@@ -337,7 +396,7 @@ export default function App() {
             // Copy to assets folder
             const path = `assets/${file.name}`;
             await repo.saveFile(path, content);
-            
+
             // Refresh file list to show the new file if needed, or just resolve
             setFiles(await repo.listFiles());
             resolveImage(path);
@@ -350,14 +409,14 @@ export default function App() {
             e.preventDefault();
             e.stopPropagation();
         }
-        
+
         if (repoType === "fs") {
             try {
                 // Check if API is available
                 if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
                     // Open folder picker FIRST (requires user gesture)
                     await fileSystemApi.open();
-                    
+
                     // Only save config after folder is selected
                     const config: AppConfig = {
                         repoType,
@@ -368,7 +427,7 @@ export default function App() {
                         gcApiKey: gcCreds.apiKey
                     };
                     await configStore.save(config);
-                    
+
                     setRepo(fileSystemApi);
                     setIsConfigured(true);
                     setShowConsole(false);
@@ -390,7 +449,7 @@ export default function App() {
                 gcApiKey: gcCreds.apiKey
             };
             await configStore.save(config);
-            
+
             setRepo(onlineRepoApi as any);
             setIsConfigured(true);
             setShowConsole(false);
@@ -402,7 +461,7 @@ export default function App() {
             await fileSystemApi.initRepo();
             setRepoType("fs");
             setRepo(fileSystemApi);
-            
+
             const config: AppConfig = {
                 repoType: "fs",
                 gitUrl: gitCreds.url,
@@ -495,18 +554,33 @@ export default function App() {
         <div className="shell">
             <main className="main">
                 <header className="topbar">
-                    <button 
+                    
+
+                    <button
                         onClick={createNewFile}
                         style={{ marginRight: "12px", padding: "4px 8px", cursor: "pointer", fontWeight: "bold" }}
                     >
                         + New
                     </button>
-                    <button 
+                    <button
                         onClick={() => setShowTemplatePicker(true)}
                         style={{ marginRight: "12px", padding: "4px 8px", cursor: "pointer" }}
                     >
                         + From Template
                     </button>
+                    <div className="searchBox">
+                        <input
+                            className="searchInput"
+                            placeholder={isIndexing ? "Indexing…" : "Search docs/blocks/templates…"}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        {indexProgress && (
+                            <div className="searchProgress">
+                                {indexProgress.done}/{indexProgress.total}
+                            </div>
+                        )}
+                    </div>
                     <div className="path">{activePath}</div>
 
                     <div className="tabs">
@@ -536,12 +610,40 @@ export default function App() {
                     </div>
 
                     <div style={{ flex: 1 }} />
-                    
+
                     <button onClick={() => setShowConsole(true)} title="App Console">
                         ⚙️ Console
                     </button>
 
                 </header>
+
+                {searchQuery.trim() && searchResults.length > 0 && (
+                    <div className="searchResults">
+                        {searchResults.map((r) => (
+                            <button
+                                key={r.path}
+                                className="searchResult"
+                                onClick={async () => {
+                                    await openTab(r.path, { activate: true });
+                                    setSearchQuery("");
+                                    setSearchResults([]);
+                                }}
+                                title={r.path}
+                            >
+                                <div className="srTitle">
+                                    {r.title} <span className="srPath">({r.path})</span>
+                                </div>
+                                <div className="srSnippet">{r.snippet}</div>
+                            </button>
+                        ))}
+                    </div>
+                )}
+                {searchQuery.trim() && !isIndexing && searchResults.length === 0 && (
+                    <div className="searchResults">
+                        <div className="searchEmpty">No matches.</div>
+                    </div>
+                )}
+
 
                 {/* document tabs strip */}
                 <div className="docTabs">
@@ -584,7 +686,7 @@ export default function App() {
                         <CodeMirrorEditor
                             value={activeTab?.content ?? ""}
                             onChange={updateActiveContent}
-                            onViewReady={() => {}}
+                            onViewReady={() => { }}
                             mode={tab === "write" ? "write" : "source"}
                             blockLabel={blockLabel}
                             onOpenBlock={(id) => openTab(`blocks/${id}.md`, { activate: true })}
@@ -672,7 +774,7 @@ export default function App() {
                         </div>
 
                         <div style={{ padding: "16px 0", display: "flex", flexDirection: "column", gap: "20px" }}>
-                            
+
                             {/* Repository Settings */}
                             <div>
                                 <div className="sidebarSectionTitle">Repository Connection</div>
@@ -701,9 +803,9 @@ export default function App() {
                                 </div>
                                 {gitMode === "online" && (
                                     <div style={{ display: "grid", gap: "8px" }}>
-                                        <input className="modalSearch" style={{ margin: 0 }} placeholder="Repo URL" value={gitCreds.url} onChange={e => setGitCreds({...gitCreds, url: e.target.value})} />
-                                        <input className="modalSearch" style={{ margin: 0 }} placeholder="Git Username" value={gitCreds.username} onChange={e => setGitCreds({...gitCreds, username: e.target.value})} />
-                                        <input className="modalSearch" style={{ margin: 0 }} type="password" placeholder="Personal Access Token" value={gitCreds.token} onChange={e => setGitCreds({...gitCreds, token: e.target.value})} />
+                                        <input className="modalSearch" style={{ margin: 0 }} placeholder="Repo URL" value={gitCreds.url} onChange={e => setGitCreds({ ...gitCreds, url: e.target.value })} />
+                                        <input className="modalSearch" style={{ margin: 0 }} placeholder="Git Username" value={gitCreds.username} onChange={e => setGitCreds({ ...gitCreds, username: e.target.value })} />
+                                        <input className="modalSearch" style={{ margin: 0 }} type="password" placeholder="Personal Access Token" value={gitCreds.token} onChange={e => setGitCreds({ ...gitCreds, token: e.target.value })} />
                                     </div>
                                 )}
                             </div>
@@ -712,8 +814,8 @@ export default function App() {
                             <div>
                                 <div className="sidebarSectionTitle">Google Classroom Integration</div>
                                 <div style={{ display: "grid", gap: "8px", marginTop: "8px" }}>
-                                    <input className="modalSearch" style={{ margin: 0 }} placeholder="Client ID" value={gcCreds.clientId} onChange={e => setGcCreds({...gcCreds, clientId: e.target.value})} />
-                                    <input className="modalSearch" style={{ margin: 0 }} type="password" placeholder="API Key" value={gcCreds.apiKey} onChange={e => setGcCreds({...gcCreds, apiKey: e.target.value})} />
+                                    <input className="modalSearch" style={{ margin: 0 }} placeholder="Client ID" value={gcCreds.clientId} onChange={e => setGcCreds({ ...gcCreds, clientId: e.target.value })} />
+                                    <input className="modalSearch" style={{ margin: 0 }} type="password" placeholder="API Key" value={gcCreds.apiKey} onChange={e => setGcCreds({ ...gcCreds, apiKey: e.target.value })} />
                                 </div>
                             </div>
 
@@ -740,7 +842,7 @@ export default function App() {
                                 >
                                     Reset App
                                 </button>
-                                <button 
+                                <button
                                     onClick={handleSaveConfig}
                                     style={{ padding: "8px 16px", background: "#007bff", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
                                 >
