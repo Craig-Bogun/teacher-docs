@@ -47,6 +47,8 @@ export default function App() {
 
     const imageResolver = useRef<((path: string | null) => void) | null>(null);
 
+    const isFsSupported = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
+
     // ---- Multi-doc tabs state ----
     const [openOrder, setOpenOrder] = useState<string[]>([]);
     const [tabsByPath, setTabsByPath] = useState<Record<string, TabDoc>>({});
@@ -458,6 +460,13 @@ export default function App() {
 
     async function handleInitRepo() {
         try {
+            if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+                await fileSystemApi.open();
+            } else {
+                alert("File System Access API is not available in this browser. Please use a modern browser like Chrome, Edge, or Opera.");
+                return;
+            }
+
             await fileSystemApi.initRepo();
             setRepoType("fs");
             setRepo(fileSystemApi);
@@ -534,14 +543,29 @@ export default function App() {
 
                     <button
                         onClick={handleSaveConfig}
-                        style={{ width: "100%", padding: "12px", background: "#007bff", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
+                        disabled={repoType === "fs" && !isFsSupported}
+                        title={repoType === "fs" && !isFsSupported ? "Not supported in this browser" : undefined}
+                        style={{
+                            width: "100%", padding: "12px", background: "#007bff", color: "white", border: "none", borderRadius: "6px", fontWeight: 600,
+                            cursor: (repoType === "fs" && !isFsSupported) ? "not-allowed" : "pointer",
+                            opacity: (repoType === "fs" && !isFsSupported) ? 0.6 : 1
+                        }}
                     >
                         {repoType === "fs" ? "Select Folder & Continue" : "Save & Continue"}
                     </button>
 
                     <div style={{ marginTop: "20px", textAlign: "center", fontSize: "13px", color: "#666" }}>
                         Or start fresh:
-                        <button onClick={handleInitRepo} style={{ display: "block", width: "100%", marginTop: "8px", padding: "8px", background: "#fff", border: "1px solid #ccc", borderRadius: "6px", cursor: "pointer" }}>
+                        <button
+                            onClick={handleInitRepo}
+                            disabled={!isFsSupported}
+                            title={!isFsSupported ? "Not supported in this browser" : undefined}
+                            style={{
+                                display: "block", width: "100%", marginTop: "8px", padding: "8px", background: "#fff", border: "1px solid #ccc", borderRadius: "6px",
+                                cursor: isFsSupported ? "pointer" : "not-allowed",
+                                opacity: isFsSupported ? 1 : 0.6
+                            }}
+                        >
                             ✨ Setup New Local Repo Structure
                         </button>
                     </div>
