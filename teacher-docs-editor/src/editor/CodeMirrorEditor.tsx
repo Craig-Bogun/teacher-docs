@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Compartment, EditorSelection, EditorState, Transaction } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
+import { EditorView, keymap, highlightActiveLine } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
@@ -63,7 +63,6 @@ export function CodeMirrorEditor({
         const state = EditorState.create({
             doc: value,
             extensions: [
-                lineNumbers(),
                 highlightActiveLine(),
                 history(),
                 markdown({ codeLanguages: languages, extensions: [GFM] }),

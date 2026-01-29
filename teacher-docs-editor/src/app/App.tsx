@@ -52,9 +52,31 @@ export default function App() {
     // ---- Multi-doc tabs state ----
     const [openOrder, setOpenOrder] = useState<string[]>([]);
     const [tabsByPath, setTabsByPath] = useState<Record<string, TabDoc>>({});
-    const [activePath, setActivePath] = useState<string>("docs/example.md");
+    const [activePath, setActivePath] = useState<string>("");
 
     const activeTab = tabsByPath[activePath];
+    
+    // Ensure there's always an active document - create untitled if none exist
+    useEffect(() => {
+        // If no active path or active path doesn't exist in tabs, create a new untitled
+        if (!activePath || !tabsByPath[activePath]) {
+            // Check if there are any tabs open
+            if (Object.keys(tabsByPath).length === 0) {
+                // Create a new untitled document
+                const name = `Untitled-${untitledCounter}`;
+                setTabsByPath((prev) => ({
+                    ...prev,
+                    [name]: { path: name, content: "", dirty: false },
+                }));
+                setOpenOrder((prev) => [...prev, name]);
+                setActivePath(name);
+            } else {
+                // Set to first available tab
+                const firstTab = Object.keys(tabsByPath)[0];
+                if (firstTab) setActivePath(firstTab);
+            }
+        }
+    }, [activePath, tabsByPath, untitledCounter]);
 
     // Search State
     const [searchQuery, setSearchQuery] = useState("");
@@ -234,46 +256,59 @@ export default function App() {
         if (!t) return;
 
         if (activePath.startsWith("Untitled-")) {
+            console.log("Opening save as dialog for:", activePath);
             setSaveAsState({ isOpen: true, currentPath: activePath });
             setNewFileName("New Document");
             setNewFileType("docs");
             return;
         }
 
-        await repo.saveFile(activePath, t.content);
-        // keep search index up to date
-        searchIndexRef.current?.upsert(activePath, t.content);
+        try {
+            await repo.saveFile(activePath, t.content);
+            // keep search index up to date
+            searchIndexRef.current?.upsert(activePath, t.content);
 
-
-        setTabsByPath((prev) => ({
-            ...prev,
-            [activePath]: { ...prev[activePath], dirty: false },
-        }));
+            setTabsByPath((prev) => ({
+                ...prev,
+                [activePath]: { ...prev[activePath], dirty: false },
+            }));
+            
+            // Refresh the file list to show the saved file
+            await refreshFileList();
+        } catch (error) {
+            console.error("Failed to save file:", error);
+            alert(`Failed to save file: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     async function performSaveAs() {
         if (!repo || !saveAsState.currentPath) return;
 
-        const cleanName = newFileName.endsWith(".md") ? newFileName : `${newFileName}.md`;
-        const newPath = `${newFileType}/${cleanName}`;
+        try {
+            const cleanName = newFileName.endsWith(".md") ? newFileName : `${newFileName}.md`;
+            const newPath = `${newFileType}/${cleanName}`;
 
-        const content = tabsByPath[saveAsState.currentPath].content;
-        await repo.saveFile(newPath, content);
+            const content = tabsByPath[saveAsState.currentPath].content;
+            await repo.saveFile(newPath, content);
 
-        // Rename tab
-        const oldPath = saveAsState.currentPath;
-        setTabsByPath(prev => {
-            const copy = { ...prev };
-            delete copy[oldPath];
-            copy[newPath] = { path: newPath, content, dirty: false };
-            return copy;
-        });
+            // Rename tab
+            const oldPath = saveAsState.currentPath;
+            setTabsByPath(prev => {
+                const copy = { ...prev };
+                delete copy[oldPath];
+                copy[newPath] = { path: newPath, content, dirty: false };
+                return copy;
+            });
 
-        setOpenOrder(prev => prev.map(p => p === oldPath ? newPath : p));
-        setActivePath(newPath);
+            setOpenOrder(prev => prev.map(p => p === oldPath ? newPath : p));
+            setActivePath(newPath);
 
-        setSaveAsState({ isOpen: false });
-        refreshFileList();
+            setSaveAsState({ isOpen: false });
+            refreshFileList();
+        } catch (error) {
+            console.error("Failed to save file as:", error);
+            alert(`Failed to save file: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     function closeTab(path: string) {
@@ -296,8 +331,13 @@ export default function App() {
 
             if (path === activePath) {
                 const idx = prev.indexOf(path);
-                const fallback = next[idx - 1] ?? next[idx] ?? next[0] ?? "";
-                if (fallback) setActivePath(fallback);
+                const fallback = next[idx - 1] ?? next[idx] ?? next[0];
+                if (fallback) {
+                    setActivePath(fallback);
+                } else if (next.length === 0) {
+                    // No more tabs - will trigger the useEffect to create untitled
+                    setActivePath("");
+                }
             }
 
             return next;
@@ -326,23 +366,38 @@ export default function App() {
                 let existing = currentLevel.find((item) => item.name === part);
 
                 if (!existing) {
+                    // Determine the type: if it's not the last part, it's a folder
+                    // If it is the last part, use the kind from the file system
+                    const itemType = isLast ? kind : "folder";
+                    
                     existing = {
                         id: currentPath,
                         name: part,
-                        type: isLast ? kind : "folder",
-                        children: (isLast && kind === "file") ? undefined : [],
+                        type: itemType,
+                        children: itemType === "folder" ? [] : undefined,
                     };
                     currentLevel.push(existing);
+                } else {
+                    // If an item already exists and we're adding a folder type, ensure it's marked as folder
+                    if (!isLast && existing.type === "file") {
+                        existing.type = "folder";
+                        existing.children = [];
+                    }
+                    if (isLast && kind === "folder" && existing.type === "file") {
+                        existing.type = "folder";
+                        existing.children = [];
+                    }
                 }
 
-                if (existing.children) {
+                if (existing.type === "folder" && existing.children) {
                     currentLevel = existing.children;
                 }
             });
         };
 
         files.forEach((f) => {
-            insert(f.path, f.kind as "file" | "folder");
+            const kind = (f.kind === "directory" || f.kind === "folder") ? "folder" : "file";
+            insert(f.path, kind as "file" | "folder");
         });
 
         return root;
@@ -394,14 +449,19 @@ export default function App() {
 
         const reader = new FileReader();
         reader.onload = async () => {
-            const content = reader.result as string;
-            // Copy to assets folder
-            const path = `assets/${file.name}`;
-            await repo.saveFile(path, content);
+            try {
+                const content = reader.result as string;
+                // Copy to assets folder
+                const path = `assets/${file.name}`;
+                await repo.saveFile(path, content);
 
-            // Refresh file list to show the new file if needed, or just resolve
-            setFiles(await repo.listFiles());
-            resolveImage(path);
+                // Refresh file list to show the new file if needed, or just resolve
+                setFiles(await repo.listFiles());
+                resolveImage(path);
+            } catch (error) {
+                console.error("Failed to upload file:", error);
+                alert(`Failed to upload file: ${error instanceof Error ? error.message : String(error)}`);
+            }
         };
         reader.readAsDataURL(file);
     }
@@ -716,10 +776,10 @@ export default function App() {
                             onOpenBlock={(id) => openTab(`blocks/${id}.md`, { activate: true })}
                             onInsertBlock={() => setShowBlockPicker(true)}
                             onSave={saveActive}
+                            onImageUpload={handleRequestImage}
                             fileItems={fileTree}
                             onFileSelect={(item) => openTab(item.id, { activate: true })}
                             activeFileId={activePath}
-                            onImageUpload={handleRequestImage}
                         />
                     </section>
                 )}
@@ -883,22 +943,22 @@ export default function App() {
                     <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: "400px" }}>
                         <div className="modalHeader">
                             <div className="modalTitle">Save New File</div>
-                            <button onClick={() => setSaveAsState({ isOpen: false })}>✕</button>
+                            <button onClick={() => setSaveAsState({ isOpen: false })} style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer" }}>✕</button>
                         </div>
 
-                        <div style={{ padding: "16px 0", display: "flex", flexDirection: "column", gap: "16px" }}>
+                        <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
                             <div>
-                                <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 600 }}>File Type</label>
-                                <div style={{ display: "flex", gap: "10px" }}>
-                                    <button className={`tab ${newFileType === "docs" ? "active" : ""}`} onClick={() => setNewFileType("docs")} style={{ flex: 1, justifyContent: "center" }}>Document (docs/)</button>
-                                    <button className={`tab ${newFileType === "blocks" ? "active" : ""}`} onClick={() => setNewFileType("blocks")} style={{ flex: 1, justifyContent: "center" }}>Block (blocks/)</button>
-                                    <button className={`tab ${newFileType === "templates" ? "active" : ""}`} onClick={() => setNewFileType("templates")} style={{ flex: 1, justifyContent: "center" }}>Template (templates/)</button>
+                                <label style={{ display: "block", marginBottom: "8px", fontSize: "13px", fontWeight: 600 }}>File Type</label>
+                                <div style={{ display: "flex", gap: "8px" }}>
+                                    <button className={`tab ${newFileType === "docs" ? "active" : ""}`} onClick={() => setNewFileType("docs")} style={{ flex: 1, padding: "8px", textAlign: "center" }}>Document (docs/)</button>
+                                    <button className={`tab ${newFileType === "blocks" ? "active" : ""}`} onClick={() => setNewFileType("blocks")} style={{ flex: 1, padding: "8px", textAlign: "center" }}>Block (blocks/)</button>
+                                    <button className={`tab ${newFileType === "templates" ? "active" : ""}`} onClick={() => setNewFileType("templates")} style={{ flex: 1, padding: "8px", textAlign: "center" }}>Template (templates/)</button>
                                 </div>
                             </div>
 
                             <div>
-                                <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 600 }}>Filename</label>
-                                <input className="modalSearch" style={{ margin: 0 }} value={newFileName} onChange={e => setNewFileName(e.target.value)} placeholder="e.g. Lesson 1" autoFocus />
+                                <label style={{ display: "block", marginBottom: "8px", fontSize: "13px", fontWeight: 600 }}>Filename</label>
+                                <input className="modalSearch" style={{ margin: 0, padding: "10px" }} value={newFileName} onChange={e => setNewFileName(e.target.value)} placeholder="e.g. Lesson 1" autoFocus />
                             </div>
 
                             <button onClick={performSaveAs} style={{ width: "100%", padding: "10px", background: "#007bff", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}>

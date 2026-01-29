@@ -44,6 +44,44 @@
     color: #000;
 }
 
+.cm-editor-toolbar .cm-alignment-group {
+    display: flex;
+    gap: 0;
+    border: 1px solid transparent;
+    border-radius: 4px;
+}
+
+.cm-alignment-group button {
+    border-right: 1px solid #ccc;
+    border-radius: 0;
+}
+
+.cm-alignment-group button:last-child {
+    border-right: none;
+}
+
+.cm-alignment-group button:first-child {
+    border-radius: 4px 0 0 4px;
+}
+
+.cm-alignment-group button:last-child {
+    border-radius: 0 4px 4px 0;
+}
+
+.cm-alignment-group button:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+.cm-editor-separator {
+    width: 1px;
+    background-color: #ddd;
+    margin: 0 4px;
+}
+
+.cm-editor-spacer {
+    flex: 1;
+}
+
 .cm-editor-host {
     flex: 1;
     overflow: hidden;
@@ -91,20 +129,145 @@
 
 .cm-table-grid {
     display: grid;
-    grid-template-columns: repeat(10, 16px);
+    grid-template-columns: repeat(10, 1fr);
     gap: 2px;
+    width: 160px;
 }
 
 .cm-table-cell {
-    width: 16px;
-    height: 16px;
+    width: 100%;
+    aspect-ratio: 1;
     border: 1px solid #e0e0e0;
     background-color: #fff;
     box-sizing: border-box;
     cursor: pointer;
 }
 
+.cm-table-cell:hover {
+    background-color: #f0f0f0;
+}
+
 .cm-table-cell.active {
     background-color: #e8f0fe;
     border-color: #1a73e8;
+}
+
+.cm-heading-flyout {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 6px 0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    min-width: 180px;
+}
+
+.cm-heading-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: white;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    font-size: 13px;
+    color: #333;
+}
+
+.cm-heading-option:hover {
+    background-color: #f0f0f0;
+}
+
+.cm-heading-preview {
+    font-weight: 600;
+    color: #666;
+    min-width: 40px;
+}
+
+.cm-heading-preview.h1 {
+    font-size: 24px;
+}
+
+.cm-heading-preview.h2 {
+    font-size: 20px;
+}
+
+.cm-heading-preview.h3 {
+    font-size: 18px;
+}
+
+.cm-heading-preview.h4 {
+    font-size: 16px;
+}
+
+.cm-heading-preview.h5 {
+    font-size: 14px;
+}
+
+.cm-heading-preview.h6 {
+    font-size: 12px;
+}
+
+.cm-heading-label {
+    color: #666;
+}
+
+/* Table Widget Styles */
+.cm-table-widget {
+    margin: 10px 0;
+    overflow-x: auto;
+}
+
+.cm-rendered-table {
+    border-collapse: collapse;
+    width: 100%;
+    background-color: #fff;
+    border: 1px solid #ddd;
+}
+
+.cm-rendered-table th,
+.cm-rendered-table td {
+    border: 1px solid #ddd;
+    padding: 8px 12px;
+}
+
+.cm-rendered-table th {
+    background-color: #f5f5f5;
+    font-weight: 600;
+}
+
+.cm-rendered-table tr:nth-child(even) {
+    background-color: #fafafa;
+}
+
+/* Text alignment classes */
+.align-left {
+    text-align: left;
+}
+
+.align-center {
+    text-align: center;
+}
+
+.align-right {
+    text-align: right;
+}
+
+/* Live preview alignment classes */
+.cm-live-align-left {
+    text-align: left;
+}
+
+.cm-live-align-center {
+    text-align: center;
+}
+
+.cm-live-align-right {
+    text-align: right;
 }

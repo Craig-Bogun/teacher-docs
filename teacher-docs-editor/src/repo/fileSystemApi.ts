@@ -183,10 +183,21 @@ export const fileSystemApi = {
         }
 
         const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
-        // @ts-ignore
-        const writable = await fileHandle.createWritable();
-        await writable.write(content);
-        await writable.close();
+        try {
+            // @ts-ignore
+            const writable = await fileHandle.createWritable();
+            try {
+                // Truncate to 0 first to clear any existing content
+                await writable.truncate(0);
+                await writable.write(content);
+            } finally {
+                // Always close the writable stream
+                await writable.close();
+            }
+        } catch (error) {
+            console.error("Error saving file:", path, error);
+            throw new Error(`Failed to save file ${path}: ${error instanceof Error ? error.message : String(error)}`);
+        }
     },
 
     async listBlocks(): Promise<{ id: string; title: string }[]> {

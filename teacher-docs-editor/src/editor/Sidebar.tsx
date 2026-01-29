@@ -16,7 +16,6 @@ type SidebarProps = {
 
 type FileTreeItemProps = {
     item: FileItem;
-    depth: number;
     activeId?: string;
     onSelect: (item: FileItem) => void;
 };
@@ -46,14 +45,15 @@ function ChevronRight() {
     );
 }
 
-function FileTreeItem({ item, depth, activeId, onSelect }: FileTreeItemProps) {
+function FileTreeItem({ item, activeId, onSelect }: FileTreeItemProps) {
     const [isOpen, setIsOpen] = useState(false);
     const isActive = item.id === activeId;
-    const hasChildren = item.type === "folder" && item.children && item.children.length > 0;
+    const isFolder = item.type === "folder";
+    const hasChildren = isFolder && item.children && item.children.length > 0;
 
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (item.type === "folder") {
+        if (isFolder) {
             setIsOpen(!isOpen);
         } else {
             onSelect(item);
@@ -61,38 +61,56 @@ function FileTreeItem({ item, depth, activeId, onSelect }: FileTreeItemProps) {
     };
 
     return (
-        <>
+        <div style={{ display: "flex", flexDirection: "column" }}>
             <div
                 className={`file-tree-item ${isActive ? "active" : ""}`}
-                style={{ paddingLeft: `${depth * 12 + 8}px` }}
+                style={{
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "4px 8px",
+                    cursor: "pointer",
+                    userSelect: "none",
+                    backgroundColor: isActive ? "#e6f7ff" : "transparent",
+                    color: isActive ? "#007bff" : "inherit"
+                }}
                 onClick={handleClick}
             >
-                {item.type === "folder" ? (
-                    <div className={`folder-chevron ${isOpen ? "open" : ""}`}>
-                        <ChevronRight />
-                    </div>
-                ) : (
-                    <div className="folder-chevron" /> /* Spacer */
-                )}
+                <div
+                    style={{
+                        width: "16px",
+                        height: "16px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginRight: "4px",
+                        transform: isOpen ? "rotate(90deg)" : "none",
+                        transition: "transform 0.1s ease",
+                        visibility: isFolder ? "visible" : "hidden",
+                        opacity: 0.6
+                    }}
+                >
+                    <ChevronRight />
+                </div>
                 
-                {item.type === "folder" ? <FolderIcon /> : <FileIcon />}
-                <span style={{ marginLeft: "4px" }}>{item.name}</span>
+                <div style={{ marginRight: "6px", display: "flex", alignItems: "center", opacity: 0.7 }}>
+                    {isFolder ? <FolderIcon /> : <FileIcon />}
+                </div>
+                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</span>
             </div>
             
             {isOpen && hasChildren && (
-                <div>
+                <div style={{ marginLeft: "12px", paddingLeft: "12px", borderLeft: "1px solid #eee" }}>
                     {item.children!.map((child) => (
                         <FileTreeItem
                             key={child.id}
                             item={child}
-                            depth={depth + 1}
                             activeId={activeId}
                             onSelect={onSelect}
                         />
                     ))}
                 </div>
             )}
-        </>
+        </div>
     );
 }
 
@@ -105,7 +123,6 @@ export function Sidebar({ items, activeId, onSelect }: SidebarProps) {
                     <FileTreeItem
                         key={item.id}
                         item={item}
-                        depth={0}
                         activeId={activeId}
                         onSelect={onSelect}
                     />

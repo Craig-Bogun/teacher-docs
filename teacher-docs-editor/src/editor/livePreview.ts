@@ -43,6 +43,90 @@ class BlockPillWidget extends WidgetType {
     }
 }
 
+class TableWidget extends WidgetType {
+    private tableMarkdown: string;
+
+    constructor(tableMarkdown: string) {
+        super();
+        this.tableMarkdown = tableMarkdown;
+    }
+
+    eq(other: TableWidget) {
+        return this.tableMarkdown === other.tableMarkdown;
+    }
+
+    private parseAlignment(separatorCell: string): string {
+        // Check alignment markers: :--- (left), :---: (center), ---: (right)
+        const trimmed = separatorCell.trim();
+        const hasLeft = trimmed.startsWith(':');
+        const hasRight = trimmed.endsWith(':');
+        
+        if (hasLeft && hasRight) return 'center';
+        if (hasRight) return 'right';
+        if (hasLeft) return 'left';
+        return 'left'; // default
+    }
+
+    toDOM() {
+        const container = document.createElement("div");
+        container.className = "cm-table-widget";
+
+        const lines = this.tableMarkdown.trim().split('\n');
+        const rows: string[][] = [];
+        let alignments: string[] = [];
+
+        for (const line of lines) {
+            const cells = line.split('|')
+                .map(cell => cell.trim())
+                .filter(cell => cell.length > 0);
+            if (cells.length > 0) {
+                rows.push(cells);
+            }
+        }
+
+        if (rows.length === 0) return container;
+
+        const table = document.createElement("table");
+        table.className = "cm-rendered-table";
+
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const tr = document.createElement("tr");
+            
+            // Check if this is a separator row (all dashes with optional colons)
+            const isSeparator = row.every(cell => /^:?-+:?$/.test(cell));
+            
+            if (isSeparator) {
+                // Parse alignment from separator row
+                alignments = row.map(cell => this.parseAlignment(cell));
+                continue;
+            }
+
+            for (let j = 0; j < row.length; j++) {
+                const cell = row[j];
+                const td = document.createElement(i === 0 ? "th" : "td");
+                td.textContent = cell;
+                
+                // Apply alignment class
+                if (alignments[j]) {
+                    td.className = `align-${alignments[j]}`;
+                }
+                
+                tr.appendChild(td);
+            }
+
+            table.appendChild(tr);
+        }
+
+        container.appendChild(table);
+        return container;
+    }
+
+    ignoreEvent() {
+        return true;
+    }
+}
+
 
 function intersectsSelection(view: EditorView, from: number, to: number) {
     const sel = view.state.selection.main;
@@ -55,6 +139,71 @@ function buildDecorations(view: EditorView, opts: LivePreviewOptions) {
 
     const labelFor = (id: string) => (opts.blockLabel ? opts.blockLabel(id) : id);
 
+    // First pass: identify fenced code blocks
+    const codeBlockRanges: Array<{ start: number; end: number; startLine: number; endLine: number }> = [];
+    const codeBlockRegex = /^```[\s\S]*?^```/gm;
+    let codeBlockMatch: RegExpExecArray | null;
+    let searchPos = 0;
+    
+    while (searchPos < doc.length) {
+        const textFromPos = doc.sliceString(searchPos);
+        const match = /^```/.exec(textFromPos);
+        
+        if (!match) break;
+        
+        const openStart = searchPos + match.index;
+        const openPos = openStart + 3;
+        
+        // Find closing ```
+        const textAfterOpen = doc.sliceString(openPos);
+        const closeMatch = /\n```/.exec(textAfterOpen);
+        
+        if (!closeMatch) {
+            searchPos = openPos;
+            break;
+        }
+        
+        const closeStart = openPos + closeMatch.index;
+        const closeEnd = closeStart + 4;
+        
+        const startLine = doc.lineAt(openStart).number;
+        const endLine = doc.lineAt(closeEnd).number;
+        
+        codeBlockRanges.push({
+            start: openStart,
+            end: closeEnd,
+            startLine,
+            endLine
+        });
+        
+        searchPos = closeEnd;
+    }
+
+    // Detect table blocks
+    const tableBlockRanges: Array<{ startLine: number; endLine: number; startPos: number; endPos: number }> = [];
+    for (let lineNo = 1; lineNo <= doc.lines; lineNo++) {
+        const line = doc.line(lineNo);
+        if (line.text.trim().startsWith("|") && (line.text.match(/\|/g) || []).length >= 2) {
+            // Found a table row, now collect consecutive table rows
+            let tableEndLine = lineNo;
+            while (tableEndLine < doc.lines) {
+                const nextLine = doc.line(tableEndLine + 1);
+                if (nextLine.text.trim().startsWith("|") && (nextLine.text.match(/\|/g) || []).length >= 2) {
+                    tableEndLine++;
+                } else {
+                    break;
+                }
+            }
+            tableBlockRanges.push({
+                startLine: lineNo,
+                endLine: tableEndLine,
+                startPos: doc.line(lineNo).from,
+                endPos: doc.line(tableEndLine).to
+            });
+            lineNo = tableEndLine; // Skip to the end of the table
+        }
+    }
+
     for (const vr of view.visibleRanges) {
         const fromLine = doc.lineAt(vr.from);
         const toLine = doc.lineAt(vr.to);
@@ -62,6 +211,49 @@ function buildDecorations(view: EditorView, opts: LivePreviewOptions) {
         for (let lineNo = fromLine.number; lineNo <= toLine.number; lineNo++) {
             const line = doc.line(lineNo);
             const text = line.text;
+
+            // Check if this line is the start of a table block
+            const tableBlock = tableBlockRanges.find(t => t.startLine === lineNo);
+            if (tableBlock) {
+                // Collect all table rows
+                const tableLines = [];
+                for (let tLineNo = tableBlock.startLine; tLineNo <= tableBlock.endLine; tLineNo++) {
+                    tableLines.push(doc.line(tLineNo).text);
+                }
+                const tableMarkdown = tableLines.join('\n');
+                
+                // Insert table widget at the beginning of the table block
+                // and hide all the original table lines
+                decos.push(
+                    Decoration.widget({
+                        widget: new TableWidget(tableMarkdown),
+                        side: -1,
+                    }).range(tableBlock.startPos)
+                );
+                
+                // Hide each line of the table by replacing with empty content on each line
+                for (let tLineNo = tableBlock.startLine; tLineNo <= tableBlock.endLine; tLineNo++) {
+                    const tLine = doc.line(tLineNo);
+                    decos.push(
+                        Decoration.replace({}).range(tLine.from, tLine.to)
+                    );
+                }
+                
+                // Skip to the end of the table
+                lineNo = tableBlock.endLine;
+                continue;
+            }
+
+            // Check if this line is inside a code block
+            const inCodeBlock = codeBlockRanges.some(
+                range => lineNo > range.startLine && lineNo < range.endLine
+            );
+
+            // If inside a code block (but not on the delimiter lines), apply code block styling
+            if (inCodeBlock && !text.startsWith("```")) {
+                decos.push(Decoration.line({ class: "cm-live-code-block" }).range(line.from));
+                // Still apply inline code formatting inside code blocks
+            }
 
             // --- Inline code (`code`) ---
             const codeRegex = /`([^`\n]+)`/g;
@@ -240,6 +432,50 @@ function buildDecorations(view: EditorView, opts: LivePreviewOptions) {
                     Decoration.mark({ class: "cm-live-italic" }).range(absInnerFrom, absInnerTo)
                 );
             }
+
+            // --- Strikethrough (~~text~~) ---
+            const strikethroughRegex = /~~([^\n~][\s\S]*?)~~/g;
+            let sm: RegExpExecArray | null;
+            while ((sm = strikethroughRegex.exec(text))) {
+                const fullStart = sm.index;
+                const fullEnd = sm.index + sm[0].length;
+                const innerStart = fullStart + 2;
+                const innerEnd = fullEnd - 2;
+
+                const absFullStart = line.from + fullStart;
+                const absInnerStart = line.from + innerStart;
+                const absInnerEnd = line.from + innerEnd;
+                const absFullEnd = line.from + fullEnd;
+
+                // Hide markers only if cursor is not inside the match
+                if (!intersectsSelection(view, absFullStart, absFullEnd)) {
+                    decos.push(Decoration.replace({}).range(absFullStart, absFullStart + 2));
+                    decos.push(Decoration.replace({}).range(absFullEnd - 2, absFullEnd));
+                }
+
+                decos.push(
+                    Decoration.mark({ class: "cm-live-strikethrough" }).range(absInnerStart, absInnerEnd)
+                );
+            }
+
+            // --- Text alignment ([align-left], [align-center], [align-right]) ---
+            const alignmentRegex = /\[align-(left|center|right)\]/g;
+            let am: RegExpExecArray | null;
+            while ((am = alignmentRegex.exec(text))) {
+                const alignmentType = am[1];
+                const start = line.from + am.index;
+                const end = start + am[0].length;
+                
+                // Hide the alignment marker
+                decos.push(Decoration.replace({}).range(start, end));
+                
+                // Apply alignment class to the entire line
+                decos.push(
+                    Decoration.line({ class: `cm-live-align-${alignmentType}` }).range(line.from)
+                );
+            }
+
+
         }
     }
 

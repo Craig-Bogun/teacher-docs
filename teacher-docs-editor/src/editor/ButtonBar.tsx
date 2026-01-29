@@ -12,20 +12,25 @@ export function ButtonBar({ view, onInsertBlock, onSave, onImageUpload }: Props)
     const [showTableMenu, setShowTableMenu] = useState(false);
     const [tableDims, setTableDims] = useState({ rows: 0, cols: 0 });
     const tableMenuRef = useRef<HTMLDivElement>(null);
+    const [showHeadingMenu, setShowHeadingMenu] = useState(false);
+    const headingMenuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (tableMenuRef.current && !tableMenuRef.current.contains(event.target as Node)) {
                 setShowTableMenu(false);
             }
+            if (headingMenuRef.current && !headingMenuRef.current.contains(event.target as Node)) {
+                setShowHeadingMenu(false);
+            }
         };
-        if (showTableMenu) {
+        if (showTableMenu || showHeadingMenu) {
             document.addEventListener("mousedown", handleClickOutside);
         }
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
-    }, [showTableMenu]);
+    }, [showTableMenu, showHeadingMenu]);
 
     const handleFormat = (marker: string) => {
         if (!view) return;
@@ -127,31 +132,111 @@ export function ButtonBar({ view, onInsertBlock, onSave, onImageUpload }: Props)
     };
 
     const insertTable = (rows: number, cols: number) => {
+        try {
+            if (!view) {
+                alert("View is not available. Please click in the editor first.");
+                return;
+            }
+            const { state, dispatch } = view;
+            const { from, to } = state.selection.main;
+
+            let header = "|";
+            let separator = "|";
+            for (let c = 1; c <= cols; c++) {
+                header += ` Header ${c} |`;
+                separator += " --- |";
+            }
+
+            let body = "";
+            for (let r = 1; r <= rows; r++) {
+                body += "\n|";
+                for (let c = 1; c <= cols; c++) {
+                    body += " Cell |";
+                }
+            }
+
+            const tableMarkdown = `${header}\n${separator}${body}\n`;
+            console.log("Inserting table:", { rows, cols, tableMarkdown });
+            
+            dispatch({
+                changes: { from, to, insert: tableMarkdown },
+                selection: { anchor: from + header.length + 1, head: from + header.length + 1 }
+            });
+            view.focus();
+            setShowTableMenu(false);
+        } catch (error) {
+            console.error("Error inserting table:", error);
+            alert(`Error: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    };
+
+    const handleCodeBlock = () => {
         if (!view) return;
         const { state, dispatch } = view;
         const { from, to } = state.selection.main;
+        const text = state.sliceDoc(from, to);
+        const codeBlock = `\`\`\`\n${text}\n\`\`\``;
+        dispatch({
+            changes: { from, to, insert: codeBlock },
+            selection: { anchor: from + 4, head: from + 4 }
+        });
+        view.focus();
+    };
 
-        let header = "|";
-        let separator = "|";
-        for (let c = 1; c <= cols; c++) {
-            header += ` Header ${c} |`;
-            separator += " --- |";
-        }
+    const handleHeading = (level: number) => {
+        handleLineStart(`${"#".repeat(level)} `);
+        setShowHeadingMenu(false);
+    };
 
-        let body = "";
-        for (let r = 1; r <= rows; r++) {
-            body += "\n|";
-            for (let c = 1; c <= cols; c++) {
-                body += " Cell |";
+    const handleAlignment = (alignment: 'left' | 'center' | 'right') => {
+        if (!view) return;
+        const { state, dispatch } = view;
+        const { from, to } = state.selection.main;
+        const startLine = state.doc.lineAt(from);
+        const endLine = state.doc.lineAt(to);
+
+        const alignmentMarker = {
+            'left': '→',
+            'center': '↔',
+            'right': '←'
+        }[alignment];
+
+        const alignmentClass = `[align-${alignment}]`;
+
+        const changes = [];
+        for (let i = startLine.number; i <= endLine.number; i++) {
+            const line = state.doc.line(i);
+            const text = line.text.trim();
+
+            // Skip empty lines
+            if (!text) continue;
+
+            // Check if alignment is already applied
+            const alignRegex = /\[align-(left|center|right)\]/;
+            const match = text.match(alignRegex);
+
+            if (match && match[1] === alignment) {
+                // Remove alignment if same
+                changes.push({
+                    from: line.from,
+                    to: line.to,
+                    insert: text.replace(alignRegex, '')
+                });
+            } else {
+                // Remove existing alignment and add new one
+                const cleanText = text.replace(alignRegex, '');
+                changes.push({
+                    from: line.from,
+                    to: line.to,
+                    insert: `${cleanText}${alignmentClass}`
+                });
             }
         }
 
-        dispatch({
-            changes: { from, to, insert: `${header}\n${separator}${body}\n` },
-            selection: { anchor: from + 2, head: from + 10 }
-        });
+        if (changes.length > 0) {
+            dispatch({ changes });
+        }
         view.focus();
-        setShowTableMenu(false);
     };
 
     return (
@@ -168,12 +253,32 @@ export function ButtonBar({ view, onInsertBlock, onSave, onImageUpload }: Props)
             <button onClick={() => handleFormat("`")} title="Inline Code" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
             </button>
+            <button onClick={handleCodeBlock} title="Code Block" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline><line x1="2" y1="5" x2="22" y2="5"></line><line x1="2" y1="19" x2="22" y2="19"></line></svg>
+            </button>
 
             <div className="cm-editor-separator" />
 
-            <button onClick={() => handleLineStart("# ")} title="Heading" type="button">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"><path d="M6 12h12"></path><path d="M6 20V4"></path><path d="M18 20V4"></path></svg>
-            </button>
+            <div style={{ position: "relative" }} ref={headingMenuRef}>
+                <button onClick={() => setShowHeadingMenu(!showHeadingMenu)} title="Heading" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"><path d="M6 12h12"></path><path d="M6 20V4"></path><path d="M18 20V4"></path></svg>
+                </button>
+                {showHeadingMenu && (
+                    <div className="cm-heading-flyout">
+                        {[1, 2, 3, 4, 5, 6].map((level) => (
+                            <button
+                                key={level}
+                                className="cm-heading-option"
+                                onClick={() => handleHeading(level)}
+                                type="button"
+                            >
+                                <span className={`cm-heading-preview h${level}`}>{"#".repeat(level)}</span>
+                                <span className="cm-heading-label">Heading {level}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
             <button onClick={() => handleLineStart("> ")} title="Quote" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"><path d="M10 11h-4a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1h3a1 1 0 0 1 1 1v6c0 2.667 -1.333 4.333 -4 5"></path><path d="M19 11h-4a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1h3a1 1 0 0 1 1 1v6c0 2.667 -1.333 4.333 -4 5"></path></svg>
             </button>
@@ -183,6 +288,20 @@ export function ButtonBar({ view, onInsertBlock, onSave, onImageUpload }: Props)
             <button onClick={() => handleLineStart("1. ", /^\d+\.\s/)} title="Numbered List" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"><line x1="10" y1="6" x2="21" y2="6"></line><line x1="10" y1="12" x2="21" y2="12"></line><line x1="10" y1="18" x2="21" y2="18"></line><path d="M4 6h1v4"></path><path d="M4 10h2"></path></svg>
             </button>
+
+            <div className="cm-editor-separator" />
+
+            <div className="cm-alignment-group">
+                <button onClick={() => handleAlignment('left')} title="Align Left" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="6" x2="13" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>
+                </button>
+                <button onClick={() => handleAlignment('center')} title="Align Center" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="6" x2="18" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>
+                </button>
+                <button onClick={() => handleAlignment('right')} title="Align Right" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"><line x1="11" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>
+                </button>
+            </div>
 
             <div className="cm-editor-separator" />
 
@@ -211,7 +330,11 @@ export function ButtonBar({ view, onInsertBlock, onSave, onImageUpload }: Props)
                                         key={i}
                                         className={`cm-table-cell ${isActive ? "active" : ""}`}
                                         onMouseEnter={() => setTableDims({ rows: r, cols: c })}
-                                        onClick={() => insertTable(r, c)}
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            insertTable(r, c);
+                                        }}
                                     />
                                 );
                             })}
